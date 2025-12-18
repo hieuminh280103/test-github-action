@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Test S3 + CloudFront Deployment</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: linear-gradient(135deg, #1e88e5, #42a5f5);
+      color: white;
+      text-align: center;
+      padding: 50px;
+    }
+    h1 {
+      font-size: 2.5rem;
+    }
+    .info {
+      margin-top: 2rem;
+      background: rgba(255, 255, 255, 0.15);
+      padding: 20px;
+      border-radius: 12px;
+      display: inline-block;
+      text-align: left;
+    }
+    code {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 2px 5px;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>✅ S3 + CloudFront Test Page</h1>
+  <p>If you see this page, your deployment works!</p>
+
+  <div class="info">
+    <p><strong>Current Time (from browser):</strong> 
+      <span id="time"></span>
+    </p>
+    <p><strong>CloudFront Cache Buster:</strong> 
+      <code>?v=<span id="version"></span></code>
+    </p>
+    <p><strong>Served via:</strong> <span id="hostname"></span></p>
+  </div>
+
+  <script>
+    document.getElementById('time').textContent = new Date().toLocaleString();
+    document.getElementById('version').textContent = Math.floor(Math.random() * 100000);
+    document.getElementById('hostname').textContent = window.location.hostname;
+    console.log("S3 + CloudFront test page loaded successfully!");
+  </script>
+</body>
+</html>
