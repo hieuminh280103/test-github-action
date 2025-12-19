@@ -1,4 +1,4 @@
-name: Deploy Static Website to S3
+name: Build and Push Docker Image to ECR
 
 on:
   push:
@@ -11,34 +11,89 @@ permissions:
   contents: read
 
 jobs:
-  deploy:
+  build-and-push-ecr:
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    # # Configure AWS credentials
-    # - name: Configure AWS credentials
-    #   uses: aws-actions/configure-aws-credentials@v1
-    #   with:
-    #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-    #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-    #     aws-region: "ap-south-1"
-
     # OIDC/IRSA Authentication - No more access keys!
     - name: Configure AWS credentials via OIDC
       uses: aws-actions/configure-aws-credentials@v4
       with:
         role-to-assume: "arn:aws:iam::481665128807:role/github-oidc-role"
-        role-session-name: GitHubActions-FE-${{ github.run_id }}
+        role-session-name: GitHubActions-ECR-${{ github.run_id }}
         aws-region: "us-east-1"
 
-    # Deploy to S3 bucket - directly sync the repository contents
-    - name: Deploy to S3
+    # Pre-build: Login to ECR and set variables (similar to CodeBuild)
+    - name: Pre-build - Login ECR and set variables
+      id: pre-build
+      env:
+        AWS_ACCOUNT_ID: "481665128807"
+        AWS_DEFAULT_REGION: "us-east-1"
+        REPOSITORY_NAME: "test-github-action"
+        IMAGE_TAG: "latest"
+        DOCKER_FILE_PATH: "Dockerfile"
+        DOCKER_BUILD_CONTEXT: "."
       run: |
-        aws s3 sync ./ s3://${{ secrets.S3_BUCKET_NAME }}/ \
-          --delete \
-          --exclude ".git/*" \
-          --exclude ".github/*" \
-          --exclude "README.md" 
+        echo "AWS CLI version:"
+        aws --version
+        
+        # Login to ECR (similar to CodeBuild)
+        aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+        
+        # Set repository URI
+        REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$REPOSITORY_NAME
+        echo "Repository URI: $REPOSITORY_URI"
+        echo "Image Tag: $IMAGE_TAG"
+        
+        # Pull existing image for cache (ignore error if not exists)
+        docker pull $REPOSITORY_URI:$IMAGE_TAG || true
+        
+        # Generate new tag with timestamp
+        NEW_TAG=$(date +%s)
+        echo "New Tag: $NEW_TAG"
+        
+        # Export variables for next steps
+        echo "repository_uri=$REPOSITORY_URI" >> $GITHUB_OUTPUT
+        echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+        echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+
+    # Build Docker image with cache
+    - name: Build Docker image
+      env:
+        REPOSITORY_URI: ${{ steps.pre-build.outputs.repository_uri }}
+        IMAGE_TAG: ${{ steps.pre-build.outputs.image_tag }}
+        NEW_TAG: ${{ steps.pre-build.outputs.new_tag }}
+        DOCKER_FILE_PATH: "Dockerfile"
+        DOCKER_BUILD_CONTEXT: "."
+      run: |
+        echo "Build started on $(date)"
+        docker build \
+          --cache-from $REPOSITORY_URI:$IMAGE_TAG \
+          -t $REPOSITORY_URI:$NEW_TAG \
+          -f $DOCKER_FILE_PATH \
+          $DOCKER_BUILD_CONTEXT
+        
+        # Tag image with IMAGE_TAG
+        docker tag $REPOSITORY_URI:$NEW_TAG $REPOSITORY_URI:$IMAGE_TAG
+
+    # Post-build: Push images to ECR
+    - name: Post-build - Push images to ECR
+      env:
+        REPOSITORY_URI: ${{ steps.pre-build.outputs.repository_uri }}
+        IMAGE_TAG: ${{ steps.pre-build.outputs.image_tag }}
+        NEW_TAG: ${{ steps.pre-build.outputs.new_tag }}
+      run: |
+        echo "Build completed on $(date)"
+        echo "Pushing the Docker image..."
+        docker image ls -a
+        
+        # Push both tags
+        docker push $REPOSITORY_URI:$IMAGE_TAG
+        docker push $REPOSITORY_URI:$NEW_TAG
+        
+        echo "✅ Successfully pushed images to ECR!"
+        echo "Image URI (latest): $REPOSITORY_URI:$IMAGE_TAG"
+        echo "Image URI (timestamp): $REPOSITORY_URI:$NEW_TAG" 
