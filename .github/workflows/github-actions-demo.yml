@@ -7,6 +7,11 @@ on:
       - staging
       - production 
 
+permissions:
+  id-token: write   # Required for OIDC authentication with AWS
+  contents: read
+  actions: read  
+
 jobs:
   get-environment:
     runs-on: ubuntu-latest
