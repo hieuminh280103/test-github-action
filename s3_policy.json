@@ -1,0 +1,51 @@
+// Trust Policy for IAM Role - need to replace <EC2_ROLE_ARN> with actual EC2 role ARN before use
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "Service": "ec2.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+        },
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": "<EC2_ROLE_ARN>"
+            },
+            "Action": "sts:AssumeRole"
+        }
+    ]
+}
+
+// S3 Access Policy - Need to replace <S3_BUCKET_ARN> with actual S3 bucket ARN before use
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "Statement1",
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject",
+                "s3:GetObjectAcl",
+                "s3:PutObject",
+                "s3:PutObjectAcl",
+                "s3:DeleteObject",
+                "s3:ListBucket"
+            ],
+            "Resource": [
+                "<S3_BUCKET_ARN>/*",
+                "<S3_BUCKET_ARN>/"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetLifecycleConfiguration",
+                "s3:PutLifecycleConfiguration"
+            ],
+            "Resource": "<S3_BUCKET_ARN>"
+        }
+    ]
+}
