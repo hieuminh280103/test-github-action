@@ -5,7 +5,7 @@ on:
     branches: 
       - develop
       - staging
-      - production 
+      - main 
 
 permissions:
   id-token: write   # Required for OIDC authentication with AWS
@@ -20,7 +20,7 @@ jobs:
     steps:
       - id: set-env
         run: |
-          if [[ "${{ github.ref }}" == "refs/heads/production" ]]; then
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "environment=production" >> $GITHUB_OUTPUT
           elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
             echo "environment=staging" >> $GITHUB_OUTPUT
@@ -36,13 +36,12 @@ jobs:
     needs: get-environment
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment: ${{ needs.get-environment.outputs.environment }}
+    # environment: ${{ needs.get-environment.outputs.environment }}
 
     env: 
       AWS_ACCOUNT_ID: "481665128807"
       AWS_REGION: "us-east-1"
       REPOSITORY_NAME: "test-github-action"
-      IMAGE_TAG: "latest"
       DOCKER_FILE_PATH: "Dockerfile"
       DOCKER_BUILD_CONTEXT: "."
 
@@ -54,7 +53,7 @@ jobs:
       uses: aws-actions/configure-aws-credentials@v4
       with:
         role-to-assume: "arn:aws:iam::481665128807:role/github-oidc-role"
-        role-session-name: GitHubActions-BE-${{ github.run_id }}
+        role-session-name: GitHubActions-FE-${{ github.run_id }}
         aws-region: "us-east-1"
 
     - name: Pre-build - Login ECR and set variables
@@ -68,57 +67,44 @@ jobs:
         
         # Set repository URI
         REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPOSITORY_NAME
-        echo "Image Tag: $IMAGE_TAG"
         
-        # Pull existing image for cache
-        docker pull $REPOSITORY_URI:$IMAGE_TAG || true
-        
-        # Generate new tag with timestamp
-        NEW_TAG=$(date +%s)
+        # Generate new tag with date + git hash
+        DATE_TAG=$(date +%Y%m%d)
+        GIT_HASH=$(git rev-parse --short HEAD)
+        NEW_TAG="${DATE_TAG}-${GIT_HASH}"
         echo "New Tag: $NEW_TAG"
         
         # Export variables for next steps
         echo "repository_uri=$REPOSITORY_URI" >> $GITHUB_OUTPUT
-        echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
         echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
 
     - name: Create .env file for build
       env:
-        VITE_API_BASE_URL: "https://api.example.com"
+        VITE_API_BASE_URL: "<VITE_API_BASE_URL>"
       run: |
         echo "Creating .env file for Vite build..."
         cat > .env << EOF
         VITE_API_BASE_URL=$VITE_API_BASE_URL
         EOF
-        
-        echo "Verifying .env file content:"
-        cat .env
 
-    - name: Build Docker image with cache
+    - name: Build Docker image
       env:
         REPOSITORY_URI: ${{ steps.pre-build.outputs.repository_uri }}
-        IMAGE_TAG: ${{ steps.pre-build.outputs.image_tag }}
         NEW_TAG: ${{ steps.pre-build.outputs.new_tag }}
       run: |
         echo "Build started on $(date)"
+        echo "Building image with tag: $NEW_TAG"
         docker build \
-          --cache-from $REPOSITORY_URI:$IMAGE_TAG \
           -t $REPOSITORY_URI:$NEW_TAG \
           -f $DOCKER_FILE_PATH \
           $DOCKER_BUILD_CONTEXT
-        
-        # Tag image with IMAGE_TAG
-        docker tag $REPOSITORY_URI:$NEW_TAG $REPOSITORY_URI:$IMAGE_TAG
 
-    - name: Post-build - Push images to ECR
+    - name: Post-build - Push image to ECR
       env:
         REPOSITORY_URI: ${{ steps.pre-build.outputs.repository_uri }}
-        IMAGE_TAG: ${{ steps.pre-build.outputs.image_tag }}
         NEW_TAG: ${{ steps.pre-build.outputs.new_tag }}
       run: |
         echo "Build completed on $(date)"
-        echo "Pushing the Docker image..."
+        echo "Pushing Docker image..."
         
-        # Push both tags
-        docker push $REPOSITORY_URI:$IMAGE_TAG
         docker push $REPOSITORY_URI:$NEW_TAG
