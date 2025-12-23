@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Backend API - Test Page</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+      text-align: center;
+      padding: 50px;
+    }
+    h1 {
+      font-size: 2.5rem;
+    }
+    .info {
+      margin-top: 2rem;
+      background: rgba(255, 255, 255, 0.15);
+      padding: 20px;
+      border-radius: 12px;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+  <h1>🚀 Backend API</h1>
+  <div class="info">
+    <p><strong>Status:</strong> Running</p>
+    <p><strong>Environment:</strong> <span id="env">N/A</span></p>
+    <p><strong>Timestamp:</strong> <span id="time"></span></p>
+  </div>
+
+  <script>
+    document.getElementById('time').textContent = new Date().toLocaleString();
+    document.getElementById('env').textContent = 'Production';
+    console.log("Backend service is running!");
+  </script>
+</body>
+</html>
+

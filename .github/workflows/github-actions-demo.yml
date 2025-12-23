@@ -32,7 +32,8 @@ jobs:
           fi
 
   
-  build-and-push-ecr:
+  # Build and push FE image to ECR
+  build-and-push-fe:
     needs: get-environment
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -41,9 +42,9 @@ jobs:
     env: 
       AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID}}
       AWS_REGION: ${{ vars.AWS_REGION}}
-      REPOSITORY_NAME: ${{ vars.REPOSITORY_NAME}}
-      DOCKER_FILE_PATH: "Dockerfile"
-      DOCKER_BUILD_CONTEXT: "."
+      REPOSITORY_NAME_FE: ${{ vars.REPOSITORY_NAME_FE }}
+      DOCKER_FILE_PATH: "fe/Dockerfile"
+      DOCKER_BUILD_CONTEXT: "fe"
 
     steps:
     - name: Checkout repository
@@ -66,12 +67,13 @@ jobs:
         aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
         
         # Set repository URI
-        REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPOSITORY_NAME
+        REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPOSITORY_NAME_FE
         
         # Generate new tag with date + git hash
         DATE_TAG=$(date +%Y%m%d)
         GIT_HASH=$(git rev-parse --short HEAD)
         NEW_TAG="${DATE_TAG}-${GIT_HASH}"
+        echo "Repository: $REPOSITORY_NAME_FE"
         echo "New Tag: $NEW_TAG"
         
         # Export variables for next steps
@@ -80,12 +82,14 @@ jobs:
 
     - name: Create .env file for build
       env:
-        VITE_API_BASE_URL: "<VITE_API_BASE_URL>"
+        VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
       run: |
         echo "Creating .env file for Vite build..."
-        cat > .env << EOF
+        cat > $DOCKER_BUILD_CONTEXT/.env << EOF
         VITE_API_BASE_URL=$VITE_API_BASE_URL
         EOF
+        echo "✅ Successfully created .env file"
+        cat $DOCKER_BUILD_CONTEXT/.env
 
     - name: Build Docker image
       env:
@@ -93,7 +97,7 @@ jobs:
         NEW_TAG: ${{ steps.pre-build.outputs.new_tag }}
       run: |
         echo "Build started on $(date)"
-        echo "Building image with tag: $NEW_TAG"
+        echo "Building FE image with tag: $NEW_TAG"
         docker build \
           -t $REPOSITORY_URI:$NEW_TAG \
           -f $DOCKER_FILE_PATH \
@@ -105,6 +109,75 @@ jobs:
         NEW_TAG: ${{ steps.pre-build.outputs.new_tag }}
       run: |
         echo "Build completed on $(date)"
-        echo "Pushing Docker image..."
+        echo "Pushing FE Docker image..."
+        docker push $REPOSITORY_URI:$NEW_TAG
+
+  # Build and push BE image to ECR
+  build-and-push-be:
+    needs: get-environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # environment: ${{ needs.get-environment.outputs.environment }}
+
+    env: 
+      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID}}
+      AWS_REGION: ${{ vars.AWS_REGION}}
+      REPOSITORY_NAME_BE: ${{ vars.REPOSITORY_NAME_BE }}
+      DOCKER_FILE_PATH: "be/Dockerfile"
+      DOCKER_BUILD_CONTEXT: "be"
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - name: Configure AWS credentials via OIDC
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+        role-session-name: GitHubActions-BE-${{ github.run_id }}
+        aws-region: ${{ vars.AWS_REGION}}
+
+    - name: Pre-build - Login ECR and set variables
+      id: pre-build
+      run: |
+        echo "=== Backend Build ==="
+        echo "AWS CLI version:"
+        aws --version
         
+        # Login to ECR
+        aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+        
+        # Set repository URI
+        REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPOSITORY_NAME_BE
+        
+        # Generate new tag with date + git hash
+        DATE_TAG=$(date +%Y%m%d)
+        GIT_HASH=$(git rev-parse --short HEAD)
+        NEW_TAG="${DATE_TAG}-${GIT_HASH}"
+        echo "Repository: $REPOSITORY_NAME_BE"
+        echo "New Tag: $NEW_TAG"
+        
+        # Export variables for next steps
+        echo "repository_uri=$REPOSITORY_URI" >> $GITHUB_OUTPUT
+        echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+
+    - name: Build Docker image
+      env:
+        REPOSITORY_URI: ${{ steps.pre-build.outputs.repository_uri }}
+        NEW_TAG: ${{ steps.pre-build.outputs.new_tag }}
+      run: |
+        echo "Build started on $(date)"
+        echo "Building BE image with tag: $NEW_TAG"
+        docker build \
+          -t $REPOSITORY_URI:$NEW_TAG \
+          -f $DOCKER_FILE_PATH \
+          $DOCKER_BUILD_CONTEXT
+
+    - name: Post-build - Push image to ECR
+      env:
+        REPOSITORY_URI: ${{ steps.pre-build.outputs.repository_uri }}
+        NEW_TAG: ${{ steps.pre-build.outputs.new_tag }}
+      run: |
+        echo "Build completed on $(date)"
+        echo "Pushing BE Docker image..."
         docker push $REPOSITORY_URI:$NEW_TAG
