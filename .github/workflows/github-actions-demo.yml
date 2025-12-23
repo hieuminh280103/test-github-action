@@ -73,7 +73,6 @@ jobs:
         DATE_TAG=$(date +%Y%m%d)
         GIT_HASH=$(git rev-parse --short HEAD)
         NEW_TAG="${DATE_TAG}-${GIT_HASH}"
-        echo "Repository: $REPOSITORY_NAME_FE"
         echo "New Tag: $NEW_TAG"
         
         # Export variables for next steps
@@ -88,8 +87,6 @@ jobs:
         cat > $DOCKER_BUILD_CONTEXT/.env << EOF
         VITE_API_BASE_URL=$VITE_API_BASE_URL
         EOF
-        echo "✅ Successfully created .env file"
-        cat $DOCKER_BUILD_CONTEXT/.env
 
     - name: Build Docker image
       env:
@@ -140,7 +137,6 @@ jobs:
     - name: Pre-build - Login ECR and set variables
       id: pre-build
       run: |
-        echo "=== Backend Build ==="
         echo "AWS CLI version:"
         aws --version
         
@@ -154,7 +150,6 @@ jobs:
         DATE_TAG=$(date +%Y%m%d)
         GIT_HASH=$(git rev-parse --short HEAD)
         NEW_TAG="${DATE_TAG}-${GIT_HASH}"
-        echo "Repository: $REPOSITORY_NAME_BE"
         echo "New Tag: $NEW_TAG"
         
         # Export variables for next steps
